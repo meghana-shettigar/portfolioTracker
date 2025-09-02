@@ -122,7 +122,7 @@
   <div class="top-container">
     <div class="header-container">
       <button onclick="goFullScreen()">Go Full Screen</button>
-      <select id="currency-select" onchange="updateCurrency()">
+      <select id="currency-select" onchange="debouncedUpdateCurrency()">
         <option value="GBP">GBP (£)</option>
         <option value="USD">USD ($)</option>
         <option value="INR">INR (₹)</option>
@@ -152,17 +152,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    // 🔑 Finnhub API Key (replace with your actual key from https://finnhub.io/)
+    // 🔑 Finnhub API Key
     const FINNHUB_API_KEY = "d2opmu9r01qga5gac8mgd2opmu9r01qga5gac8n0";
 
-    // 🔑 ExchangeRate-API Key (replace with your valid key from https://www.exchangerate-api.com/)
+    // 🔑 ExchangeRate-API Key
     const EXCHANGE_RATE_API_KEY = "e63b1f393614bdd6a549445f";
 
     // 🔹 Fallback exchange rates
     const FALLBACK_RATES = {
       USD_TO_GBP: 0.698,
       USD_TO_INR: 83.5,
-      GBP_TO_INR: 119.6275 // Derived from USD_TO_GBP and USD_TO_INR
+      GBP_TO_INR: 119.6275
+    };
+
+    // 🔹 Cached exchange rates
+    let cachedExchangeRates = {
+      GBP: FALLBACK_RATES.USD_TO_GBP,
+      INR: FALLBACK_RATES.USD_TO_INR
     };
 
     // 🔹 Trading212 FX fee
@@ -174,11 +180,6 @@
       "MARA": 15.85,
       "CON3.L": 6.55
     };
-
-    // 🔹 Hardcoded invested amounts (edit these as needed)
-    const INVESTED_NISHAN = 58000; // £58,000 for Nishan
-    const INVESTED_MEGHANA = 54000; // £54,000 for Meghana
-    const TOTAL_INVESTED = INVESTED_NISHAN + INVESTED_MEGHANA; // £112,000
 
     // 🔹 Portfolio configuration (edit these as needed)
     const stocks = {
@@ -193,6 +194,10 @@
         { ticker: "CON3.L", shares: 1330.2, buyPrice: 12.6469, currency: "USD" }
       ]
     };
+
+    // 🔹 Global variables for totals
+    let globalTotalWorthGBP = 0;
+    let globalTotalInvestedGBP = 0;
 
     // 🔹 Full-screen function
     function goFullScreen() {
@@ -233,6 +238,9 @@
 
     // 🔹 Fetch exchange rates from USD to target currency
     async function fetchExchangeRate(toCurrency) {
+      if (cachedExchangeRates[toCurrency]) {
+        return cachedExchangeRates[toCurrency];
+      }
       const url = `https://api.exchangerate-api.com/v4/latest/USD?access_key=${EXCHANGE_RATE_API_KEY}`;
       try {
         const res = await fetch(url);
@@ -241,7 +249,12 @@
           return FALLBACK_RATES[`USD_TO_${toCurrency}`] || 1;
         }
         const data = await res.json();
-        return data.rates?.[toCurrency] || FALLBACK_RATES[`USD_TO_${toCurrency}`] || 1;
+        if (!data.rates || typeof data.rates[toCurrency] !== 'number' || data.rates[toCurrency] <= 0) {
+          console.error(`Invalid or missing rate for ${toCurrency}`);
+          return FALLBACK_RATES[`USD_TO_${toCurrency}`] || 1;
+        }
+        cachedExchangeRates[toCurrency] = data.rates[toCurrency];
+        return data.rates[toCurrency];
       } catch (err) {
         console.error(`Error fetching exchange rate for ${toCurrency}:`, err);
         return FALLBACK_RATES[`USD_TO_${toCurrency}`] || 1;
@@ -251,8 +264,16 @@
     // 🔹 Convert GBP to target currency using USD as base
     async function convertGBPToCurrency(amountGBP, toCurrency) {
       if (toCurrency === "GBP") return amountGBP;
+      if (!Number.isFinite(amountGBP) || amountGBP < 0) {
+        console.error(`Invalid amountGBP: ${amountGBP}`);
+        return 0;
+      }
       const usdToGbp = await fetchExchangeRate("GBP");
       const usdToTarget = await fetchExchangeRate(toCurrency);
+      if (usdToGbp <= 0 || usdToTarget <= 0) {
+        console.error(`Invalid exchange rates: USD_TO_GBP=${usdToGbp}, USD_TO_${toCurrency}=${usdToTarget}`);
+        return amountGBP; // Fallback to GBP to avoid NaN
+      }
       const gbpToTarget = usdToTarget / usdToGbp;
       return amountGBP * gbpToTarget;
     }
@@ -282,19 +303,35 @@
 
     // 🔹 Format number with commas
     function formatNumberWithCommas(number) {
+      if (!Number.isFinite(number) || number === null || number === undefined) {
+        console.error(`Invalid number for formatting: ${number}`);
+        return "0.00";
+      }
       return number.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
 
+    // 🔹 Debounce function to limit rapid calls
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
     // 🔹 Update currency display
-    async function updateCurrency(totalWorthGBP) {
+    async function updateCurrency() {
       const currency = document.getElementById("currency-select").value;
       const currencySymbols = { GBP: "£", USD: "$", INR: "₹" };
-      const totalInvestedGBP = TOTAL_INVESTED;
-      const totalProfitGBP = totalWorthGBP - totalInvestedGBP;
-      const totalProfitPercent = (totalInvestedGBP !== 0) ? (totalProfitGBP / totalInvestedGBP * 100) : 0;
+      const totalProfitGBP = globalTotalWorthGBP - globalTotalInvestedGBP;
+      const totalProfitPercent = (globalTotalInvestedGBP !== 0) ? (totalProfitGBP / globalTotalInvestedGBP * 100) : 0;
 
-      const totalWorth = await convertGBPToCurrency(totalWorthGBP, currency);
-      const totalInvested = await convertGBPToCurrency(totalInvestedGBP, currency);
+      const totalWorth = await convertGBPToCurrency(globalTotalWorthGBP, currency);
+      const totalInvested = await convertGBPToCurrency(globalTotalInvestedGBP, currency);
       const totalProfit = await convertGBPToCurrency(totalProfitGBP, currency);
 
       document.getElementById("total").innerHTML =
@@ -302,9 +339,12 @@
         <span style="color:#2596be">Total Net Worth: </span> ${currencySymbols[currency]}${formatNumberWithCommas(totalWorth)}<br>
          <span style="font-size:0.6em;color:#2596be">Invested: </span> <span style="font-size:0.6em"> ${currencySymbols[currency]}${formatNumberWithCommas(totalInvested)}</span><br>
          <span style="font-size:0.8em;color:${totalProfit >= 0 ? '#00A36C' : '#E63946'}">
-           P/L: ${currencySymbols[currency]}${formatNumberWithCommas(totalProfit)} (${totalProfitPercent.toFixed(2)}%)
+           P/L: ${currencySymbols[currency]}${formatNumberWithCommas(totalProfit)} (${formatNumberWithCommas(totalProfitPercent)}%)
          </span>`;
     }
+
+    // 🔹 Debounced updateCurrency
+    const debouncedUpdateCurrency = debounce(updateCurrency, 500);
 
     async function calculate() {
       // Fetch USD to GBP spot rate
@@ -312,7 +352,8 @@
       // Effective rate with Trading212 FX fee
       const effective_USD_TO_GBP = spot_USD_TO_GBP * (1 + FX_FEE_PERCENT);
 
-      let totalWorthGBP = 0;
+      globalTotalWorthGBP = 0;
+      globalTotalInvestedGBP = 0;
       const container = document.getElementById("columns");
       container.innerHTML = "";
 
@@ -323,7 +364,7 @@
         "CON3.L": 0
       };
 
-      // First pass: Calculate total worth for percentage calculations
+      // First pass: Calculate total worth and invested for percentage calculations
       for (const [person, list] of Object.entries(stocks)) {
         for (const s of list) {
           const currentPrice = await fetchPrice(s.ticker);
@@ -331,15 +372,18 @@
             console.warn(`No price data for ${s.ticker}, skipping`);
             continue;
           }
-          let currentGBP;
+          let currentGBP, investedGBP;
           if (s.currency === "USD") {
             const currentUSD = currentPrice * s.shares;
             currentGBP = currentUSD * spot_USD_TO_GBP;
+            investedGBP = s.buyPrice * s.shares * effective_USD_TO_GBP;
           } else {
             currentGBP = currentPrice * s.shares;
+            investedGBP = s.buyPrice * s.shares;
           }
           stockValues[s.ticker] += currentGBP;
-          totalWorthGBP += currentGBP;
+          globalTotalWorthGBP += currentGBP;
+          globalTotalInvestedGBP += investedGBP;
         }
       }
 
@@ -410,49 +454,7 @@
       }
 
       // Update header with selected currency
-      await updateCurrency(totalWorthGBP);
-
-      // Update pie chart with percentages
-      if (stockPieChart) {
-        stockPieChart.destroy();
-      }
-      const ctx = document.getElementById('stockPieChart').getContext('2d');
-      stockPieChart = new Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels: Object.keys(stockValues).map(ticker => {
-            const percent = totalWorthGBP !== 0 ? (stockValues[ticker] / totalWorthGBP * 100) : 0;
-            return `${ticker} (£${stockValues[ticker].toFixed(2)}, ${percent.toFixed(2)}%)`;
-          }),
-          datasets: [{
-            data: Object.values(stockValues),
-            backgroundColor: ['#be4d25', '#6c25be', '#bea925'],
-            borderColor: '#FFFFFF',
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: {
-                color: '#FFFFFF',
-                font: { size: 14 },
-                boxWidth: 20,
-                padding: 15
-              }
-            },
-            title: {
-              display: true,
-              text: 'Stock Distribution by Current Value (£)',
-              color: '#FFFFFF',
-              font: { size: 16 }
-            }
-          }
-        }
-      });
+      await updateCurrency();
     }
 
     // Initialize clocks and calculate
