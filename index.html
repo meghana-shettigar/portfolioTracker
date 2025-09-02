@@ -286,10 +286,9 @@
     }
 
     // 🔹 Update currency display
-    async function updateCurrency() {
+    async function updateCurrency(totalWorthGBP) {
       const currency = document.getElementById("currency-select").value;
       const currencySymbols = { GBP: "£", USD: "$", INR: "₹" };
-      const totalWorthGBP = 193075.61; // Hardcoded as per original
       const totalInvestedGBP = TOTAL_INVESTED;
       const totalProfitGBP = totalWorthGBP - totalInvestedGBP;
       const totalProfitPercent = (totalInvestedGBP !== 0) ? (totalProfitGBP / totalInvestedGBP * 100) : 0;
@@ -313,7 +312,7 @@
       // Effective rate with Trading212 FX fee
       const effective_USD_TO_GBP = spot_USD_TO_GBP * (1 + FX_FEE_PERCENT);
 
-      let totalWorth = 0;
+      let totalWorthGBP = 0;
       const container = document.getElementById("columns");
       container.innerHTML = "";
 
@@ -340,7 +339,7 @@
             currentGBP = currentPrice * s.shares;
           }
           stockValues[s.ticker] += currentGBP;
-          totalWorth += currentGBP;
+          totalWorthGBP += currentGBP;
         }
       }
 
@@ -411,7 +410,7 @@
       }
 
       // Update header with selected currency
-      await updateCurrency();
+      await updateCurrency(totalWorthGBP);
 
       // Update pie chart with percentages
       if (stockPieChart) {
@@ -422,7 +421,7 @@
         type: 'pie',
         data: {
           labels: Object.keys(stockValues).map(ticker => {
-            const percent = totalWorth !== 0 ? (stockValues[ticker] / totalWorth * 100) : 0;
+            const percent = totalWorthGBP !== 0 ? (stockValues[ticker] / totalWorthGBP * 100) : 0;
             return `${ticker} (£${stockValues[ticker].toFixed(2)}, ${percent.toFixed(2)}%)`;
           }),
           datasets: [{
