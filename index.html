@@ -155,9 +155,6 @@
     // 🔑 Finnhub API Key
     const FINNHUB_API_KEY = "d2opmu9r01qga5gac8mgd2opmu9r01qga5gac8n0";
 
-    // 🔑 ExchangeRate-API Key (not needed for v6 open)
-    // const EXCHANGE_RATE_API_KEY = "e63b1f393614bdd6a549445f"; removed
-
     // 🔹 Fallback exchange rates updated to current
     const FALLBACK_RATES = {
       USD_TO_GBP: 0.739,
@@ -176,7 +173,7 @@
 
     // 🔹 Fallback prices matching Trading212
     const FALLBACK_PRICES = {
-      "IREN": 27.72,
+      "IREN": 29.11, // Updated to match provided price
       "MARA": 15.85,
       "CON3.L": 6.55
     };
@@ -198,6 +195,9 @@
     // 🔹 Global variables for totals
     let globalTotalWorthGBP = 0;
     let globalTotalInvestedGBP = 0;
+
+    // 🔹 Hardcoded total invested amount for header
+    const HARDCODED_TOTAL_INVESTED_GBP = 112000; // £54,000 (Meghana) + £58,000 (Nishan)
 
     // 🔹 Full-screen function
     function goFullScreen() {
@@ -328,10 +328,10 @@
       const currency = document.getElementById("currency-select").value;
       const currencySymbols = { GBP: "£", USD: "$", INR: "₹" };
       const totalWorth = await convertGBPToCurrency(globalTotalWorthGBP, currency);
-      const totalInvested = await convertGBPToCurrency(globalTotalInvestedGBP, currency);
-      const totalProfitGBP = globalTotalWorthGBP - globalTotalInvestedGBP;
+      const totalInvested = await convertGBPToCurrency(HARDCODED_TOTAL_INVESTED_GBP, currency);
+      const totalProfitGBP = globalTotalWorthGBP - HARDCODED_TOTAL_INVESTED_GBP;
       const totalProfit = await convertGBPToCurrency(totalProfitGBP, currency);
-      const totalProfitPercent = (globalTotalInvestedGBP !== 0) ? (totalProfitGBP / globalTotalInvestedGBP * 100) : 0;
+      const totalProfitPercent = (HARDCODED_TOTAL_INVESTED_GBP !== 0) ? (totalProfitGBP / HARDCODED_TOTAL_INVESTED_GBP * 100) : 0;
 
       document.getElementById("total").innerHTML =
         `<br>
