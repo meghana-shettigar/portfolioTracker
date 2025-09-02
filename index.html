@@ -155,14 +155,14 @@
     // 🔑 Finnhub API Key
     const FINNHUB_API_KEY = "d2opmu9r01qga5gac8mgd2opmu9r01qga5gac8n0";
 
-    // 🔑 ExchangeRate-API Key
-    const EXCHANGE_RATE_API_KEY = "e63b1f393614bdd6a549445f";
+    // 🔑 ExchangeRate-API Key (not needed for v6 open)
+    // const EXCHANGE_RATE_API_KEY = "e63b1f393614bdd6a549445f"; removed
 
-    // 🔹 Fallback exchange rates
+    // 🔹 Fallback exchange rates updated to current
     const FALLBACK_RATES = {
-      USD_TO_GBP: 0.698,
-      USD_TO_INR: 83.5,
-      GBP_TO_INR: 119.6275
+      USD_TO_GBP: 0.739,
+      USD_TO_INR: 88.13,
+      GBP_TO_INR: 119.25
     };
 
     // 🔹 Cached exchange rates
@@ -241,7 +241,7 @@
       if (cachedExchangeRates[toCurrency]) {
         return cachedExchangeRates[toCurrency];
       }
-      const url = `https://api.exchangerate-api.com/v4/latest/USD?access_key=${EXCHANGE_RATE_API_KEY}`;
+      const url = `https://open.er-api.com/v6/latest/USD`;
       try {
         const res = await fetch(url);
         if (!res.ok) {
@@ -327,12 +327,11 @@
     async function updateCurrency() {
       const currency = document.getElementById("currency-select").value;
       const currencySymbols = { GBP: "£", USD: "$", INR: "₹" };
-      const totalProfitGBP = globalTotalWorthGBP - globalTotalInvestedGBP;
-      const totalProfitPercent = (globalTotalInvestedGBP !== 0) ? (totalProfitGBP / globalTotalInvestedGBP * 100) : 0;
-
       const totalWorth = await convertGBPToCurrency(globalTotalWorthGBP, currency);
       const totalInvested = await convertGBPToCurrency(globalTotalInvestedGBP, currency);
+      const totalProfitGBP = globalTotalWorthGBP - globalTotalInvestedGBP;
       const totalProfit = await convertGBPToCurrency(totalProfitGBP, currency);
+      const totalProfitPercent = (globalTotalInvestedGBP !== 0) ? (totalProfitGBP / globalTotalInvestedGBP * 100) : 0;
 
       document.getElementById("total").innerHTML =
         `<br>
