@@ -452,6 +452,48 @@
         container.innerHTML += html;
       }
 
+      // Update pie chart with percentages
+      if (stockPieChart) {
+        stockPieChart.destroy();
+      }
+      const ctx = document.getElementById('stockPieChart').getContext('2d');
+      stockPieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(stockValues).map(ticker => {
+            const percent = globalTotalWorthGBP !== 0 ? (stockValues[ticker] / globalTotalWorthGBP * 100) : 0;
+            return `${ticker} (£${formatNumberWithCommas(stockValues[ticker])}, ${percent.toFixed(2)}%)`;
+          }),
+          datasets: [{
+            data: Object.values(stockValues),
+            backgroundColor: ['#be4d25', '#6c25be', '#bea925'],
+            borderColor: '#FFFFFF',
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#FFFFFF',
+                font: { size: 14 },
+                boxWidth: 20,
+                padding: 15
+              }
+            },
+            title: {
+              display: true,
+              text: 'Stock Distribution by Current Value (£)',
+              color: '#FFFFFF',
+              font: { size: 16 }
+            }
+          }
+        }
+      });
+
       // Update header with selected currency
       await updateCurrency();
     }
