@@ -155,6 +155,9 @@
     // 🔑 Finnhub API Key
     const FINNHUB_API_KEY = "d2opmu9r01qga5gac8mgd2opmu9r01qga5gac8n0";
 
+    // 🔑 Alpha Vantage API Key
+    const ALPHA_VANTAGE_API_KEY = "JNIETEKO9DHF7TIO"; // Replace with your Alpha Vantage API key
+
     // 🔹 Fallback exchange rates updated to current
     const FALLBACK_RATES = {
       USD_TO_GBP: 0.739,
@@ -171,24 +174,24 @@
     // 🔹 Trading212 FX fee
     const FX_FEE_PERCENT = 0.0015; // 0.15%
 
-    // 🔹 Fallback prices matching Trading212
+    // 🔹 Fallback prices matching Trading212 (CON3.L in GBP)
     const FALLBACK_PRICES = {
-      "IREN": 29.11, // Updated to match provided price
-      "MARA": 15.85,
-      "CON3.L": 6.55
+      "IREN": 29.11, // USD
+      "MARA": 15.85, // USD
+      "CON3.L": 6.55 // GBP
     };
 
-    // 🔹 Portfolio configuration (edit these as needed)
+    // 🔹 Portfolio configuration (CON3.L in GBP)
     const stocks = {
       NISHAN: [
         { ticker: "IREN", shares: 3343.637, buyPrice: 9.8, currency: "USD" },
         { ticker: "MARA", shares: 2891.738, buyPrice: 17.02, currency: "USD" },
-        { ticker: "CON3.L", shares: 407.12, buyPrice: 20.06, currency: "USD" }
+        { ticker: "CON3.L", shares: 407.12, buyPrice: 20.06, currency: "GBP" }
       ],
       MEGHANA: [
         { ticker: "IREN", shares: 3023.242984, buyPrice: 11.76, currency: "USD" },
         { ticker: "MARA", shares: 2151.218686, buyPrice: 15.76, currency: "USD" },
-        { ticker: "CON3.L", shares: 1330.2, buyPrice: 12.6469, currency: "USD" }
+        { ticker: "CON3.L", shares: 1330.2, buyPrice: 12.6469, currency: "GBP" }
       ]
     };
 
@@ -278,23 +281,53 @@
       return amountGBP * gbpToTarget;
     }
 
-    // 🔹 Fetch stock price from Finnhub.io
+    // 🔹 Fetch stock price (Alpha Vantage for CON3.L, Finnhub for others)
+    let priceCache = {};
     async function fetchPrice(ticker) {
-      const formattedTicker = ticker.includes(".L") ? ticker.replace(".L", ".LON") : ticker;
-      const url = `https://finnhub.io/api/v1/quote?symbol=${formattedTicker}&token=${FINNHUB_API_KEY}`;
-      try {
-        const res = await fetch(url);
-        console.log(`Fetching ${ticker} (${formattedTicker}): Status ${res.status}`);
-        if (!res.ok) {
-          console.error(`Error fetching ${ticker}: ${res.status} ${res.statusText}`);
+      if (priceCache[ticker] && Date.now() - priceCache[ticker].timestamp < 60000) {
+        return priceCache[ticker].price;
+      }
+      if (ticker === "CON3.L") {
+        // Use Alpha Vantage for CON3.L
+        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=CON3.L&apikey=${ALPHA_VANTAGE_API_KEY}`;
+        try {
+          const res = await fetch(url);
+          console.log(`Fetching ${ticker} (Alpha Vantage): Status ${res.status}`);
+          if (!res.ok) {
+            console.error(`Error fetching ${ticker}: ${res.status} ${res.statusText}`);
+            return FALLBACK_PRICES[ticker] || null;
+          }
+          const data = await res.json();
+          const price = data["Global Quote"] && data["Global Quote"]["05. price"] ? parseFloat(data["Global Quote"]["05. price"]) : FALLBACK_PRICES[ticker] || null;
+          if (price) {
+            priceCache[ticker] = { price, timestamp: Date.now() };
+          }
+          return price;
+        } catch (err) {
+          console.error(`Error fetching ${ticker}:`, err);
           return FALLBACK_PRICES[ticker] || null;
         }
-        const data = await res.json();
-        console.log(`Response for ${ticker}:`, data);
-        return data.c || FALLBACK_PRICES[ticker] || null;
-      } catch (err) {
-        console.error(`Error fetching ${ticker}:`, err);
-        return FALLBACK_PRICES[ticker] || null;
+      } else {
+        // Use Finnhub for other tickers
+        const formattedTicker = ticker.includes(".L") ? ticker.replace(".L", ".LON") : ticker;
+        const url = `https://finnhub.io/api/v1/quote?symbol=${formattedTicker}&token=${FINNHUB_API_KEY}`;
+        try {
+          const res = await fetch(url);
+          console.log(`Fetching ${ticker} (Finnhub): Status ${res.status}`);
+          if (!res.ok) {
+            console.error(`Error fetching ${ticker}: ${res.status} ${res.statusText}`);
+            return FALLBACK_PRICES[ticker] || null;
+          }
+          const data = await res.json();
+          const price = data.c || FALLBACK_PRICES[ticker] || null;
+          if (price) {
+            priceCache[ticker] = { price, timestamp: Date.now() };
+          }
+          return price;
+        } catch (err) {
+          console.error(`Error fetching ${ticker}:`, err);
+          return FALLBACK_PRICES[ticker] || null;
+        }
       }
     }
 
@@ -377,7 +410,7 @@
             currentGBP = currentUSD * spot_USD_TO_GBP;
             investedGBP = s.buyPrice * s.shares * effective_USD_TO_GBP;
           } else {
-            currentGBP = currentPrice * s.shares;
+            currentGBP = currentPrice * s.shares; // CON3.L is in GBP
             investedGBP = s.buyPrice * s.shares;
           }
           stockValues[s.ticker] += currentGBP;
@@ -392,7 +425,7 @@
 
         let html = `<div class="person"><h2>${person.toUpperCase()}</h2>
         <table>
-          <tr><th>Stock</th><th>Shares</th><th>Current Price ($)</th><th>Invested (£)</th><th>Current (£)</th><th>P/L (£)</th><th>P/L (%)</th></tr>`;
+          <tr><th>Stock</th><th>Shares</th><th>Current Price</th><th>Invested (£)</th><th>Current (£)</th><th>P/L (£)</th><th>P/L (%)</th></tr>`;
 
         for (const s of list) {
           const currentPrice = await fetchPrice(s.ticker);
